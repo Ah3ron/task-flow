@@ -3,9 +3,11 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from taskflow.cache import TaskCache, get_cache
 from taskflow.config import get_settings
 from taskflow.database import get_session
 from taskflow.models import Task, TaskStatus
@@ -14,16 +16,23 @@ from taskflow.schemas import TaskCreate, TaskRead, TaskUpdate
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    engine = create_async_engine(get_settings().database_url, pool_pre_ping=True)
+    settings = get_settings()
+    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+    redis = Redis.from_url(
+        settings.redis_url, decode_responses=True, socket_connect_timeout=0.3, socket_timeout=0.3
+    )
     app.state.session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    app.state.task_cache = TaskCache(redis, settings.cache_ttl_seconds)
     try:
         yield
     finally:
+        await redis.aclose()
         await engine.dispose()
 
 
 app = FastAPI(title="TaskFlow", version="0.1.0", lifespan=lifespan)
 Session = Annotated[AsyncSession, Depends(get_session)]
+Cache = Annotated[TaskCache, Depends(get_cache)]
 
 
 @app.get("/health", tags=["health"])
@@ -61,23 +70,30 @@ async def find_task(task_id: int, session: AsyncSession) -> Task:
 
 
 @app.get("/tasks/{task_id}", response_model=TaskRead, tags=["tasks"])
-async def get_task(task_id: int, session: Session) -> Task:
-    return await find_task(task_id, session)
+async def get_task(task_id: int, session: Session, cache: Cache) -> TaskRead:
+    cached = await cache.get(task_id)
+    if cached is not None:
+        return cached
+    task = TaskRead.model_validate(await find_task(task_id, session))
+    await cache.set(task)
+    return task
 
 
 @app.patch("/tasks/{task_id}", response_model=TaskRead, tags=["tasks"])
-async def update_task(task_id: int, payload: TaskUpdate, session: Session) -> Task:
+async def update_task(task_id: int, payload: TaskUpdate, session: Session, cache: Cache) -> Task:
     task = await find_task(task_id, session)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(task, field, value)
     await session.commit()
+    await cache.invalidate(task_id)
     await session.refresh(task)
     return task
 
 
 @app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["tasks"])
-async def delete_task(task_id: int, session: Session) -> Response:
+async def delete_task(task_id: int, session: Session, cache: Cache) -> Response:
     task = await find_task(task_id, session)
     await session.delete(task)
     await session.commit()
+    await cache.invalidate(task_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
