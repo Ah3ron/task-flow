@@ -3,6 +3,7 @@
 Revision ID: 20260912_01
 Revises:
 """
+
 import sqlalchemy as sa
 from alembic import op
 
@@ -21,7 +22,11 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "todo", "in_progress", "done", name="task_status", native_enum=False,
+                "todo",
+                "in_progress",
+                "done",
+                name="task_status",
+                native_enum=False,
                 create_constraint=True,
             ),
             nullable=False,
