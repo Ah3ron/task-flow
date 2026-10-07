@@ -1,6 +1,10 @@
+import os
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
+import pytest
+from redis.asyncio import Redis
 from redis.exceptions import ConnectionError
 
 from taskflow.cache import TaskCache
@@ -45,3 +49,19 @@ async def test_invalid_cached_value_is_a_miss() -> None:
     redis = AsyncMock()
     redis.get.return_value = "not json"
     assert await TaskCache(redis, 60).get(1) is None
+
+
+@pytest.mark.skipif(not os.getenv("TEST_REDIS_URL"), reason="TEST_REDIS_URL is not set")
+async def test_real_redis_roundtrip() -> None:
+    redis = Redis.from_url(os.environ["TEST_REDIS_URL"], decode_responses=True)
+    cache = TaskCache(redis, 60)
+    task = sample_task().model_copy(update={"id": uuid4().int % 10**16})
+    try:
+        await cache.set(task)
+        assert await cache.get(task.id) == task
+        assert 0 < await redis.ttl(cache.key(task.id)) <= 60
+        await cache.invalidate(task.id)
+        assert await cache.get(task.id) is None
+    finally:
+        await redis.delete(cache.key(task.id))
+        await redis.aclose()
