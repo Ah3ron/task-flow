@@ -144,3 +144,7 @@ git push -u origin main
 ```
 
 Do not commit `.env` or real credentials.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
