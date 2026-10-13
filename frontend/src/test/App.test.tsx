@@ -81,6 +81,9 @@ describe("task workspace", () => {
     const user = userEvent.setup()
     render(<App />)
     expect(await screen.findByText("Task 1")).toBeInTheDocument()
+    const list = screen.getByRole("list", { name: "Tasks" })
+    expect(within(list).getAllByRole("listitem")).toHaveLength(8)
+    expect(within(list).getByRole("button", { name: "Edit Task 1" })).toBeInTheDocument()
     expect(screen.queryByText("Task 9")).not.toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: /next/i }))
     expect(await screen.findByText("Task 9")).toBeInTheDocument()
@@ -88,6 +91,7 @@ describe("task workspace", () => {
     expect(await screen.findByText("Task 1")).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Done" }))
     expect(await screen.findByText("Task 9")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Done" })).toHaveAttribute("aria-pressed", "true")
     expect(screen.queryByText("Task 1")).not.toBeInTheDocument()
   })
 
