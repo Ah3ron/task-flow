@@ -73,7 +73,8 @@ npm run dev
 
 Open the URL printed by Vite (normally <http://localhost:5173>). Its development proxy forwards
 `/api` to the local API at port 8000. If PostgreSQL and Redis are already running, there is no need
-to start them again.
+to start them again. To use an API on a different address, set `TASKFLOW_API_URL` when starting
+Vite, for example `TASKFLOW_API_URL=http://127.0.0.1:8001 npm run dev`.
 
 Configure the app through environment variables or `.env`:
 
