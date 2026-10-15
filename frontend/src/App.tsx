@@ -1,8 +1,11 @@
+import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import {
   ArrowLeft, ArrowRight, CheckCircle2, Circle, CircleDot, ClipboardList,
-  ExternalLink, Layers2, Pencil, Plus, Trash2,
+  ExternalLink, GripVertical, Layers2, Pencil, Plus, Trash2,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { TaskForm } from "@/components/task-form"
 import { Button } from "@/components/ui/button"
@@ -17,10 +20,10 @@ const filters: { value: TaskFilter; label: string }[] = [
   { value: "in_progress", label: "In progress" },
   { value: "done", label: "Done" },
 ]
-const statuses: Record<TaskStatus, { label: string; className: string; icon: typeof Circle }> = {
-  todo: { label: "To do", className: "bg-base-200 text-base-content/65", icon: Circle },
-  in_progress: { label: "In progress", className: "bg-info/10 text-info", icon: CircleDot },
-  done: { label: "Done", className: "bg-success/10 text-success", icon: CheckCircle2 },
+const statuses: Record<TaskStatus, { label: string; rowClass: string; icon: typeof Circle }> = {
+  todo: { label: "To do", rowClass: "border-l-base-content/25 bg-base-100", icon: Circle },
+  in_progress: { label: "In progress", rowClass: "border-l-info bg-info/10", icon: CircleDot },
+  done: { label: "Done", rowClass: "border-l-success bg-success/10", icon: CheckCircle2 },
 }
 
 function Logo() {
@@ -32,26 +35,47 @@ function Logo() {
   )
 }
 
-function StatusBadge({ status }: { status: TaskStatus }) {
-  const { label, className, icon: Icon } = statuses[status]
-  return <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", className)}><Icon className="size-3.5" />{label}</span>
-}
-
-function TaskRow({ task, onEdit, onDelete }: { task: Task; onEdit: () => void; onDelete: () => void }) {
+function TaskRow({ task, onEdit, onDelete, onUpdated }: { task: Task; onEdit: () => void; onDelete: () => void; onUpdated: () => void }) {
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  const Icon = statuses[task.status].icon
   const date = new Date(task.created_at)
   const dateLabel = Number.isNaN(date.getTime()) ? "Unknown date" : new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date)
+
+  async function changeStatus(status: TaskStatus) {
+    if (status === task.status || saving) return
+    setSaving(true)
+    setError(null)
+    try {
+      await tasksApi.update(task.id, { status })
+      onUpdated()
+    } catch (cause) {
+      setError(errorMessage(cause))
+      setSaving(false)
+    }
+  }
+
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 px-4 py-4 transition-colors hover:bg-base-200/60 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:items-center sm:px-5 md:grid-cols-[minmax(0,1fr)_8rem_6rem_auto]">
-      <div className="min-w-0 flex-1">
-        <p className="break-words text-sm font-semibold leading-5">{task.title}</p>
+    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-2 border-l-4 px-2 py-3 sm:grid-cols-[auto_minmax(0,1fr)_9rem_auto] sm:items-center sm:px-4 md:grid-cols-[auto_minmax(0,1fr)_9rem_6rem_auto]", statuses[task.status].rowClass, isDragging && "z-10 opacity-80 shadow-lg")}>
+      <button ref={setActivatorNodeRef} type="button" {...attributes} {...listeners} aria-label={`Reorder ${task.title}`} className="flex size-9 touch-none cursor-grab items-center justify-center rounded-md text-base-content/45 hover:bg-base-content/5 hover:text-base-content focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing"><GripVertical className="size-4" /></button>
+      <div className="min-w-0 self-center">
+        <p className={cn("break-words text-sm font-semibold leading-5", task.status === "done" && "text-base-content/60 line-through")}>{task.title}</p>
         {task.description && <p className="mt-1 line-clamp-2 break-words text-sm leading-5 text-base-content/55">{task.description}</p>}
       </div>
-      <div className="col-start-1 row-start-2 flex items-center gap-3 sm:col-start-2 sm:row-start-1"><StatusBadge status={task.status} /><span className="text-xs text-base-content/45 sm:hidden">{dateLabel}</span></div>
-      <span className="hidden text-xs text-base-content/50 md:col-start-3 md:row-start-1 md:block">{dateLabel}</span>
-      <div className="col-start-2 row-start-1 -my-1 flex items-center gap-0.5 sm:col-start-3 md:col-start-4">
-        <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${task.title}`} onClick={onEdit}><Pencil /></Button>
-        <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${task.title}`} onClick={onDelete}><Trash2 /></Button>
+      <div className="col-span-2 col-start-2 row-start-2 flex items-center gap-2 sm:col-span-1 sm:col-start-3 sm:row-start-1">
+        <Icon aria-hidden="true" className="size-4 shrink-0 text-base-content/55" />
+        <select aria-label={`Status for ${task.title}`} className="select select-sm w-28 shrink-0 bg-base-100 text-xs font-medium sm:w-32" value={task.status} disabled={saving} onChange={(event) => void changeStatus(event.target.value as TaskStatus)}>
+          {(Object.keys(statuses) as TaskStatus[]).map((status) => <option key={status} value={status}>{statuses[status].label}</option>)}
+        </select>
+        <span className="text-xs text-base-content/45 sm:hidden">{dateLabel}</span>
       </div>
+      <span className="hidden text-xs text-base-content/50 md:col-start-4 md:row-start-1 md:block">{dateLabel}</span>
+      <div className="col-start-3 row-start-1 -my-1 flex items-center gap-0.5 sm:col-start-4 md:col-start-5">
+        <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={saving}><Pencil /></Button>
+        <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={saving}><Trash2 /></Button>
+      </div>
+      {error && <p role="alert" className="col-span-full pl-11 text-sm text-error">Could not update status: {error}</p>}
     </li>
   )
 }
@@ -98,6 +122,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [editor, setEditor] = useState<Task | "new" | null>(null)
   const [deleting, setDeleting] = useState<Task | null>(null)
+  const orders = useRef<Record<string, number[]>>({})
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
 
   useEffect(() => {
     const controller = new AbortController()
@@ -106,7 +132,15 @@ export default function App() {
     tasksApi.list(filter, page * PAGE_SIZE, PAGE_SIZE + 1, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return
-        setTasks(result.slice(0, PAGE_SIZE))
+        if (result.length === 0 && page > 0) {
+          setPage((value) => value - 1)
+          return
+        }
+        const items = result.slice(0, PAGE_SIZE)
+        const order = orders.current[`${filter}:${page}`] ?? []
+        const positions = new Map(order.map((id, index) => [id, index]))
+        items.sort((a, b) => (positions.get(a.id) ?? Infinity) - (positions.get(b.id) ?? Infinity))
+        setTasks(items)
         setHasNext(result.length > PAGE_SIZE)
       })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorMessage(cause)) })
@@ -129,6 +163,16 @@ export default function App() {
     setDeleting(null)
     if (page > 0 && tasks.length === 1) setPage((value) => value - 1)
     else setRevision((value) => value + 1)
+  }
+
+  function reorder({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id) return
+    const from = tasks.findIndex((task) => task.id === active.id)
+    const to = tasks.findIndex((task) => task.id === over.id)
+    if (from < 0 || to < 0) return
+    const next = arrayMove(tasks, from, to)
+    orders.current[`${filter}:${page}`] = next.map((task) => task.id)
+    setTasks(next)
   }
 
   return (
@@ -168,8 +212,12 @@ export default function App() {
               </div>
             ) : (
               <>
-                <div aria-hidden="true" className="hidden items-center gap-3 border-b border-base-300 bg-base-200/50 px-5 py-2 text-xs font-medium text-base-content/45 sm:flex"><span className="flex-1">Task</span><span className="w-32">Status</span><span className="hidden w-24 md:block">Created</span><span className="w-20">Actions</span></div>
-                <ul aria-label="Tasks" className="divide-y divide-base-300">{tasks.map((task) => <TaskRow key={task.id} task={task} onEdit={() => setEditor(task)} onDelete={() => setDeleting(task)} />)}</ul>
+                <p className="border-b border-base-300 bg-base-200/50 px-4 py-2 text-xs text-base-content/55">Drag to reorder this page. Order resets when you reload.</p>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorder}>
+                  <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+                    <ul aria-label="Tasks" className="divide-y divide-base-300">{tasks.map((task) => <TaskRow key={task.id} task={task} onEdit={() => setEditor(task)} onDelete={() => setDeleting(task)} onUpdated={() => setRevision((value) => value + 1)} />)}</ul>
+                  </SortableContext>
+                </DndContext>
               </>
             )}
           </div>

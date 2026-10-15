@@ -45,7 +45,7 @@ export const tasksApi = {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
     })
   },
-  update(id: number, input: TaskInput) {
+  update(id: number, input: Partial<TaskInput>) {
     return request<Task>(`/tasks/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
     })

@@ -66,7 +66,7 @@ describe("task workspace", () => {
     await user.click(within(dialog).getByRole("button", { name: "Save changes" }))
     await waitFor(() => expect(tasks[0].status).toBe("done"))
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
-    expect(screen.getByText("Done", { selector: "span" })).toBeInTheDocument()
+    expect(await screen.findByRole("combobox", { name: "Status for Write tests" })).toHaveValue("done")
 
     await user.click(screen.getByRole("button", { name: "Delete Write tests" }))
     dialog = screen.getByRole("dialog")
@@ -103,5 +103,69 @@ describe("task workspace", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Network unavailable")
     await user.click(screen.getByRole("button", { name: "Try again" }))
     expect(await screen.findByText("A fresh start")).toBeInTheDocument()
+  })
+
+  it("changes status directly and refreshes the filtered list", async () => {
+    tasks = [task(1), task(2, "done")]
+    const fetchMock = mockApi()
+    const user = userEvent.setup()
+    render(<App />)
+    await screen.findByText("Task 1")
+    await user.click(screen.getByRole("button", { name: "To do" }))
+    const status = await screen.findByRole("combobox", { name: "Status for Task 1" })
+    await user.selectOptions(status, "done")
+    await waitFor(() => expect(tasks[0].status).toBe("done"))
+    expect(await screen.findByText("Nothing here yet")).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith("/api/tasks/1", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ status: "done" }) }))
+    await user.click(screen.getByRole("button", { name: "Done" }))
+    expect(await screen.findByRole("combobox", { name: "Status for Task 1" })).toHaveValue("done")
+  })
+
+  it("keeps the previous status and reports a failed update", async () => {
+    tasks = [task(1)]
+    const fetchMock = mockApi()
+    const user = userEvent.setup()
+    render(<App />)
+    const status = await screen.findByRole("combobox", { name: "Status for Task 1" })
+    fetchMock.mockRejectedValueOnce(new Error("Network unavailable"))
+    await user.selectOptions(status, "in_progress")
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not update status: Network unavailable")
+    expect(status).toHaveValue("todo")
+    expect(status).toBeEnabled()
+  })
+
+  it("reorders tasks with the keyboard", async () => {
+    tasks = [task(1), task(2), task(3)]
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const row = this.closest("li")
+      const index = row ? Array.from(row.parentElement!.children).indexOf(row) : 0
+      return DOMRect.fromRect({ x: 0, y: index * 80, width: 400, height: 80 })
+    })
+    try {
+      const user = userEvent.setup()
+      const view = render(<App />)
+      const handle = await screen.findByRole("button", { name: "Reorder Task 1" })
+      await user.click(handle)
+      await user.keyboard(" {ArrowDown} ")
+      await waitFor(() => {
+        const rows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
+        expect(rows.map((row) => within(row).getByRole("combobox").getAttribute("aria-label"))).toEqual([
+          "Status for Task 2", "Status for Task 1", "Status for Task 3",
+        ])
+      })
+      await user.selectOptions(screen.getByRole("combobox", { name: "Status for Task 1" }), "done")
+      await waitFor(() => expect(tasks[0].status).toBe("done"))
+      await waitFor(() => expect(screen.getByRole("combobox", { name: "Status for Task 1" })).toHaveValue("done"))
+      const rows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
+      expect(within(rows[0]).getByRole("combobox")).toHaveAccessibleName("Status for Task 2")
+      expect(rows[1]).toHaveClass("bg-success/10")
+      view.unmount()
+      render(<App />)
+      await screen.findByRole("combobox", { name: "Status for Task 1" })
+      const resetRows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
+      expect(within(resetRows[0]).getByRole("combobox")).toHaveAccessibleName("Status for Task 1")
+    } finally {
+      rect.mockRestore()
+    }
   })
 })
