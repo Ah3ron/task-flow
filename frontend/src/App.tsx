@@ -35,10 +35,10 @@ function Logo() {
   )
 }
 
-function TaskRow({ task, onEdit, onDelete, onUpdated }: { task: Task; onEdit: () => void; onDelete: () => void; onUpdated: () => void }) {
+function TaskRow({ task, disabled, onEdit, onDelete, onUpdated }: { task: Task; disabled: boolean; onEdit: () => void; onDelete: () => void; onUpdated: (task: Task) => void }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, disabled })
   const Icon = statuses[task.status].icon
   const date = new Date(task.created_at)
   const dateLabel = Number.isNaN(date.getTime()) ? "Unknown date" : new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date)
@@ -48,32 +48,33 @@ function TaskRow({ task, onEdit, onDelete, onUpdated }: { task: Task; onEdit: ()
     setSaving(true)
     setError(null)
     try {
-      await tasksApi.update(task.id, { status })
-      onUpdated()
+      const updated = await tasksApi.update(task.id, { status })
+      onUpdated(updated)
     } catch (cause) {
       setError(errorMessage(cause))
+    } finally {
       setSaving(false)
     }
   }
 
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-2 border-l-4 px-2 py-3 sm:grid-cols-[auto_minmax(0,1fr)_9rem_auto] sm:items-center sm:px-4 md:grid-cols-[auto_minmax(0,1fr)_9rem_6rem_auto]", statuses[task.status].rowClass, isDragging && "z-10 opacity-80 shadow-lg")}>
-      <button ref={setActivatorNodeRef} type="button" {...attributes} {...listeners} aria-label={`Reorder ${task.title}`} className="flex size-9 touch-none cursor-grab items-center justify-center rounded-md text-base-content/45 hover:bg-base-content/5 hover:text-base-content focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing"><GripVertical className="size-4" /></button>
+      <button ref={setActivatorNodeRef} type="button" {...attributes} {...listeners} disabled={disabled} aria-label={`Reorder ${task.title}`} className="flex size-9 touch-none cursor-grab items-center justify-center rounded-md text-base-content/45 hover:bg-base-content/5 hover:text-base-content focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing"><GripVertical className="size-4" /></button>
       <div className="min-w-0 self-center">
         <p className={cn("break-words text-sm font-semibold leading-5", task.status === "done" && "text-base-content/60 line-through")}>{task.title}</p>
         {task.description && <p className="mt-1 line-clamp-2 break-words text-sm leading-5 text-base-content/55">{task.description}</p>}
       </div>
       <div className="col-span-2 col-start-2 row-start-2 flex items-center gap-2 sm:col-span-1 sm:col-start-3 sm:row-start-1">
         <Icon aria-hidden="true" className="size-4 shrink-0 text-base-content/55" />
-        <select aria-label={`Status for ${task.title}`} className="select select-sm w-28 shrink-0 bg-base-100 text-xs font-medium sm:w-32" value={task.status} disabled={saving} onChange={(event) => void changeStatus(event.target.value as TaskStatus)}>
+        <select aria-label={`Status for ${task.title}`} className="select select-sm w-28 shrink-0 bg-base-100 text-xs font-medium sm:w-32" value={task.status} disabled={saving || disabled} onChange={(event) => void changeStatus(event.target.value as TaskStatus)}>
           {(Object.keys(statuses) as TaskStatus[]).map((status) => <option key={status} value={status}>{statuses[status].label}</option>)}
         </select>
         <span className="text-xs text-base-content/45 sm:hidden">{dateLabel}</span>
       </div>
       <span className="hidden text-xs text-base-content/50 md:col-start-4 md:row-start-1 md:block">{dateLabel}</span>
       <div className="col-start-3 row-start-1 -my-1 flex items-center gap-0.5 sm:col-start-4 md:col-start-5">
-        <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={saving}><Pencil /></Button>
-        <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={saving}><Trash2 /></Button>
+        <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={saving || disabled}><Pencil /></Button>
+        <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={saving || disabled}><Trash2 /></Button>
       </div>
       {error && <p role="alert" className="col-span-full pl-11 text-sm text-error">Could not update status: {error}</p>}
     </li>
@@ -119,11 +120,14 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [hasNext, setHasNext] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadedQuery, setLoadedQuery] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editor, setEditor] = useState<Task | "new" | null>(null)
   const [deleting, setDeleting] = useState<Task | null>(null)
   const orders = useRef<Record<string, number[]>>({})
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
+  const query = `${filter}:${page}`
+  const showingPrevious = loadedQuery !== null && loadedQuery !== query
 
   useEffect(() => {
     const controller = new AbortController()
@@ -142,6 +146,7 @@ export default function App() {
         items.sort((a, b) => (positions.get(a.id) ?? Infinity) - (positions.get(b.id) ?? Infinity))
         setTasks(items)
         setHasNext(result.length > PAGE_SIZE)
+        setLoadedQuery(`${filter}:${page}`)
       })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorMessage(cause)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
@@ -196,32 +201,33 @@ export default function App() {
               <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filter tasks">
                 {filters.map((item) => <button key={item.value} type="button" aria-pressed={filter === item.value} onClick={() => selectFilter(item.value)} className={cn("rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-primary", filter === item.value ? "bg-base-200 text-base-content" : "text-base-content/55 hover:text-base-content")}>{item.label}</button>)}
               </div>
-              <span className="px-3 text-xs text-base-content/45">{!loading && !error ? `${tasks.length} shown` : ""}</span>
+              <span className="px-3 text-xs text-base-content/45" role="status">{loading && loadedQuery !== null ? `Updating tasks...${showingPrevious ? " Showing previous results." : ""}` : showingPrevious ? "Showing previous results" : loadedQuery !== null ? `${tasks.length} shown` : ""}</span>
             </div>
 
-            {loading ? (
+            {loading && loadedQuery === null ? (
               <div className="flex min-h-64 items-center justify-center gap-3 text-sm text-base-content/55" role="status"><span className="loading loading-spinner loading-sm" /> Loading tasks...</div>
-            ) : error ? (
-              <div role="alert" className="alert alert-error alert-soft m-4 w-auto flex flex-col items-start gap-3 sm:flex-row sm:items-center"><span>Could not load tasks: {error}</span><Button type="button" variant="outline" size="sm" onClick={() => setRevision((value) => value + 1)}>Try again</Button></div>
-            ) : tasks.length === 0 ? (
+            ) : <>
+              {error && <div role="alert" className="alert alert-error alert-soft m-4 w-auto flex flex-col items-start gap-3 sm:flex-row sm:items-center"><span>Could not load tasks: {error}{loadedQuery !== null && " Showing previous results."}</span><Button type="button" variant="outline" size="sm" onClick={() => setRevision((value) => value + 1)}>Try again</Button></div>}
+              {loadedQuery !== null && tasks.length === 0 && !showingPrevious ? (
               <div className="flex min-h-64 flex-col items-center justify-center px-6 py-10 text-center">
                 <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/8 text-primary"><ClipboardList className="size-6" /></div>
                 <h3 className="mt-5 font-semibold">{filter === "all" ? "A fresh start" : "Nothing here yet"}</h3>
                 <p className="mt-2 max-w-xs text-sm leading-6 text-base-content/55">{filter === "all" ? "Your task list is clear. Create a task to get started." : "No tasks match this status. Try another filter or create a task."}</p>
                 <Button type="button" variant="outline" size="sm" className="mt-5" onClick={() => setEditor("new")}><Plus /> Create task</Button>
               </div>
-            ) : (
+            ) : tasks.length > 0 ? (
               <>
                 <p className="border-b border-base-300 bg-base-200/50 px-4 py-2 text-xs text-base-content/55">Drag to reorder this page. Order resets when you reload.</p>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorder}>
                   <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-                    <ul aria-label="Tasks" className="divide-y divide-base-300">{tasks.map((task) => <TaskRow key={task.id} task={task} onEdit={() => setEditor(task)} onDelete={() => setDeleting(task)} onUpdated={() => setRevision((value) => value + 1)} />)}</ul>
+                    <ul aria-label="Tasks" aria-busy={loading} className="divide-y divide-base-300">{tasks.map((task) => <TaskRow key={task.id} task={task} disabled={showingPrevious} onEdit={() => setEditor(task)} onDelete={() => setDeleting(task)} onUpdated={(updated) => { setTasks((current) => current.map((item) => item.id === updated.id ? updated : item)); setRevision((value) => value + 1) }} />)}</ul>
                   </SortableContext>
                 </DndContext>
               </>
-            )}
+            ) : null}
+            </>}
           </div>
-          {!loading && !error && (page > 0 || hasNext) && <div className="mt-4 flex items-center justify-between gap-3"><span className="text-sm text-base-content/55">Page {page + 1}</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((value) => value - 1)}><ArrowLeft /> Previous</Button><Button type="button" variant="outline" size="sm" disabled={!hasNext} onClick={() => setPage((value) => value + 1)}>Next <ArrowRight /></Button></div></div>}
+          {loadedQuery !== null && (page > 0 || hasNext) && <div className="mt-4 flex items-center justify-between gap-3"><span className="text-sm text-base-content/55">Page {page + 1}</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={page === 0 || loading || showingPrevious} onClick={() => setPage((value) => value - 1)}><ArrowLeft /> Previous</Button><Button type="button" variant="outline" size="sm" disabled={!hasNext || loading || showingPrevious} onClick={() => setPage((value) => value + 1)}>Next <ArrowRight /></Button></div></div>}
         </section>
       </main>
       {editor !== null && <TaskForm task={editor === "new" ? null : editor} onClose={() => setEditor(null)} onSaved={saved} />}
