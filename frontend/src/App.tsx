@@ -20,10 +20,10 @@ const filters: { value: TaskFilter; label: string }[] = [
   { value: "in_progress", label: "In progress" },
   { value: "done", label: "Done" },
 ]
-const statuses: Record<TaskStatus, { label: string; rowClass: string; icon: typeof Circle }> = {
-  todo: { label: "To do", rowClass: "border-l-base-content/25 bg-base-100", icon: Circle },
-  in_progress: { label: "In progress", rowClass: "border-l-info bg-info/10", icon: CircleDot },
-  done: { label: "Done", rowClass: "border-l-success bg-success/10", icon: CheckCircle2 },
+const statuses: Record<TaskStatus, { label: string; rowClass: string; iconClass: string; icon: typeof Circle }> = {
+  todo: { label: "To do", rowClass: "border-base-300 bg-base-100", iconClass: "bg-base-200 text-base-content/55", icon: Circle },
+  in_progress: { label: "In progress", rowClass: "border-info/30 bg-info/10", iconClass: "bg-info/15 text-info", icon: CircleDot },
+  done: { label: "Done", rowClass: "border-success/30 bg-success/10", iconClass: "bg-success/15 text-success", icon: CheckCircle2 },
 }
 
 function Logo() {
@@ -58,25 +58,30 @@ function TaskRow({ task, disabled, onEdit, onDelete, onUpdated }: { task: Task; 
   }
 
   return (
-    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-2 border-l-4 px-2 py-3 sm:grid-cols-[auto_minmax(0,1fr)_9rem_auto] sm:items-center sm:px-4 md:grid-cols-[auto_minmax(0,1fr)_9rem_6rem_auto]", statuses[task.status].rowClass, isDragging && "z-10 opacity-80 shadow-lg")}>
-      <button ref={setActivatorNodeRef} type="button" {...attributes} {...listeners} disabled={disabled} aria-label={`Reorder ${task.title}`} className="flex size-9 touch-none cursor-grab items-center justify-center rounded-md text-base-content/45 hover:bg-base-content/5 hover:text-base-content focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing"><GripVertical className="size-4" /></button>
-      <div className="min-w-0 self-center">
-        <p className={cn("break-words text-sm font-semibold leading-5", task.status === "done" && "text-base-content/60 line-through")}>{task.title}</p>
-        {task.description && <p className="mt-1 line-clamp-2 break-words text-sm leading-5 text-base-content/55">{task.description}</p>}
+    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("card card-border relative rounded-xl shadow-sm shadow-base-content/5", statuses[task.status].rowClass, isDragging && "z-10 opacity-90 shadow-lg")}>
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-1 p-2 sm:gap-x-3 sm:p-3">
+        <button ref={setActivatorNodeRef} type="button" {...attributes} {...listeners} disabled={disabled} aria-label={`Reorder ${task.title}`} className="flex size-8 touch-none cursor-grab items-center justify-center rounded-lg text-base-content/40 hover:bg-base-content/5 hover:text-base-content focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing disabled:cursor-not-allowed"><GripVertical className="size-4" /></button>
+        <div className="min-w-0 pt-1">
+          <div className="flex items-start gap-2.5">
+            <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-lg", statuses[task.status].iconClass)}><Icon aria-hidden="true" className="size-4" /></span>
+            <div className="min-w-0 pt-0.5">
+              <p className={cn("break-words text-sm font-semibold leading-5", task.status === "done" && "text-base-content/60 line-through")}>{task.title}</p>
+              {task.description && <p className="mt-1 line-clamp-2 break-words text-sm leading-5 text-base-content/60">{task.description}</p>}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center text-base-content/50">
+          <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={saving || disabled}><Pencil /></Button>
+          <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={saving || disabled}><Trash2 /></Button>
+        </div>
+        <div className="col-span-2 col-start-2 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 sm:pl-8">
+          <select aria-label={`Status for ${task.title}`} className="select select-ghost select-sm w-32 rounded-lg bg-base-100/80 text-xs font-semibold" value={task.status} disabled={saving || disabled} onChange={(event) => void changeStatus(event.target.value as TaskStatus)}>
+            {(Object.keys(statuses) as TaskStatus[]).map((status) => <option key={status} value={status}>{statuses[status].label}</option>)}
+          </select>
+          <span className="text-xs text-base-content/50">Created {dateLabel}</span>
+        </div>
+        {error && <p role="alert" className="col-span-2 col-start-2 mt-2 break-words text-sm text-error sm:pl-8">Could not update status: {error}</p>}
       </div>
-      <div className="col-span-2 col-start-2 row-start-2 flex items-center gap-2 sm:col-span-1 sm:col-start-3 sm:row-start-1">
-        <Icon aria-hidden="true" className="size-4 shrink-0 text-base-content/55" />
-        <select aria-label={`Status for ${task.title}`} className="select select-sm w-28 shrink-0 bg-base-100 text-xs font-medium sm:w-32" value={task.status} disabled={saving || disabled} onChange={(event) => void changeStatus(event.target.value as TaskStatus)}>
-          {(Object.keys(statuses) as TaskStatus[]).map((status) => <option key={status} value={status}>{statuses[status].label}</option>)}
-        </select>
-        <span className="text-xs text-base-content/45 sm:hidden">{dateLabel}</span>
-      </div>
-      <span className="hidden text-xs text-base-content/50 md:col-start-4 md:row-start-1 md:block">{dateLabel}</span>
-      <div className="col-start-3 row-start-1 -my-1 flex items-center gap-0.5 sm:col-start-4 md:col-start-5">
-        <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={saving || disabled}><Pencil /></Button>
-        <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={saving || disabled}><Trash2 /></Button>
-      </div>
-      {error && <p role="alert" className="col-span-full pl-11 text-sm text-error">Could not update status: {error}</p>}
     </li>
   )
 }
@@ -217,10 +222,10 @@ export default function App() {
               </div>
             ) : tasks.length > 0 ? (
               <>
-                <p className="border-b border-base-300 bg-base-200/50 px-4 py-2 text-xs text-base-content/55">Drag to reorder this page. Order resets when you reload.</p>
+                <p className="px-4 pt-4 text-xs text-base-content/55">Drag to reorder this page. Order resets when you reload.</p>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorder}>
                   <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-                    <ul aria-label="Tasks" aria-busy={loading} className="divide-y divide-base-300">{tasks.map((task) => <TaskRow key={task.id} task={task} disabled={showingPrevious} onEdit={() => setEditor(task)} onDelete={() => setDeleting(task)} onUpdated={(updated) => { setTasks((current) => current.map((item) => item.id === updated.id ? updated : item)); setRevision((value) => value + 1) }} />)}</ul>
+                    <ul aria-label="Tasks" aria-busy={loading} className="space-y-2 p-3 sm:p-4">{tasks.map((task) => <TaskRow key={task.id} task={task} disabled={showingPrevious} onEdit={() => setEditor(task)} onDelete={() => setDeleting(task)} onUpdated={(updated) => { setTasks((current) => current.map((item) => item.id === updated.id ? updated : item)); setRevision((value) => value + 1) }} />)}</ul>
                   </SortableContext>
                 </DndContext>
               </>
