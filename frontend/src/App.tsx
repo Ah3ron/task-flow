@@ -5,7 +5,7 @@ import {
   ArrowLeft, ArrowRight, CheckCircle2, Circle, CircleDot, ClipboardList,
   ExternalLink, GripVertical, Layers2, Pencil, Plus, Trash2,
 } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 
 import { TaskForm } from "@/components/task-form"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,20 @@ import { errorMessage, tasksApi, type Task, type TaskFilter, type TaskStatus } f
 import { cn } from "@/lib/utils"
 
 const PAGE_SIZE = 8
+const ORDER_STORAGE_KEY = "taskflow.task-order.v1"
+
+function loadOrders(): Record<string, number[]> {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(ORDER_STORAGE_KEY) ?? "{}")
+    if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {}
+    return Object.fromEntries(Object.entries(stored).filter(([key, value]) =>
+      /^(all|todo|in_progress|done):\d+$/.test(key) && Array.isArray(value) && value.every((id: unknown) => Number.isSafeInteger(id) && (id as number) > 0),
+    ))
+  } catch {
+    return {}
+  }
+}
+
 const filters: { value: TaskFilter; label: string }[] = [
   { value: "all", label: "All tasks" },
   { value: "todo", label: "To do" },
@@ -112,7 +126,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [editor, setEditor] = useState<Task | "new" | null>(null)
   const [deleting, setDeleting] = useState<Task | null>(null)
-  const orders = useRef<Record<string, number[]>>({})
+  const [orders] = useState(loadOrders)
+  const [orderSaveError, setOrderSaveError] = useState(false)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
   const query = `${filter}:${page}`
   const showingPrevious = loadedQuery !== null && loadedQuery !== query
@@ -129,7 +144,7 @@ export default function App() {
           return
         }
         const items = result.slice(0, PAGE_SIZE)
-        const order = orders.current[`${filter}:${page}`] ?? []
+        const order = orders[`${filter}:${page}`] ?? []
         const positions = new Map(order.map((id, index) => [id, index]))
         items.sort((a, b) => (positions.get(a.id) ?? Infinity) - (positions.get(b.id) ?? Infinity))
         setTasks(items)
@@ -139,7 +154,7 @@ export default function App() {
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorMessage(cause)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [filter, page, revision])
+  }, [filter, page, revision, orders])
 
   function selectFilter(value: TaskFilter) {
     setFilter(value)
@@ -165,7 +180,13 @@ export default function App() {
     const to = tasks.findIndex((task) => task.id === over.id)
     if (from < 0 || to < 0) return
     const next = arrayMove(tasks, from, to)
-    orders.current[`${filter}:${page}`] = next.map((task) => task.id)
+    orders[query] = next.map((task) => task.id)
+    try {
+      localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(orders))
+      setOrderSaveError(false)
+    } catch {
+      setOrderSaveError(true)
+    }
     setTasks(next)
   }
 
@@ -206,7 +227,8 @@ export default function App() {
               </div>
             ) : tasks.length > 0 ? (
               <>
-                <p className="px-4 pt-4 text-xs text-base-content/55">Drag to reorder this page. Order resets when you reload.</p>
+                <p className="px-4 pt-4 text-xs text-base-content/55">Drag to reorder this page. Order is saved in this browser.</p>
+                {orderSaveError && <div role="alert" className="alert alert-warning alert-soft mx-4 mt-3 w-auto text-sm">Could not save the order in this browser. It will reset on reload.</div>}
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorder}>
                   <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
                     <ul aria-label="Tasks" aria-busy={loading} className="space-y-2 p-3 sm:p-4">{tasks.map((task) => <TaskRow key={task.id} task={task} disabled={showingPrevious} onEdit={() => setEditor(task)} onDelete={() => setDeleting(task)} />)}</ul>

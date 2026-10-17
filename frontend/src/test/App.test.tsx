@@ -45,7 +45,7 @@ function mockApi() {
   return mock
 }
 
-beforeEach(() => { tasks = []; mockApi() })
+beforeEach(() => { tasks = []; localStorage.clear(); mockApi() })
 
 describe("task workspace", () => {
   it("creates, edits and deletes a task through the API", async () => {
@@ -195,7 +195,7 @@ describe("task workspace", () => {
     expect(screen.getByRole("button", { name: "Edit Task 2" })).toBeEnabled()
   })
 
-  it("reorders tasks with the keyboard", async () => {
+  it("saves keyboard reordering across reloads, separately for each filter", async () => {
     tasks = [task(1), task(2), task(3)]
     const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       const row = this.closest("li")
@@ -226,9 +226,65 @@ describe("task workspace", () => {
       view.unmount()
       render(<App />)
       await screen.findByRole("button", { name: "Edit Task 1" })
-      const resetRows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
-      expect(within(resetRows[0]).getByRole("button", { name: "Edit Task 1" })).toBeInTheDocument()
+      const savedRows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
+      expect(within(savedRows[0]).getByRole("button", { name: "Edit Task 2" })).toBeInTheDocument()
+      await user.click(screen.getByRole("button", { name: "To do" }))
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Edit Task 1" })).not.toBeInTheDocument())
+      const filteredRows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
+      expect(within(filteredRows[0]).getByRole("button", { name: "Edit Task 2" })).toBeInTheDocument()
+      await user.click(screen.getByRole("button", { name: "All tasks" }))
+      await screen.findByRole("button", { name: "Edit Task 1" })
+      expect(within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem").map((row) => within(row).getByRole("button", { name: /^Edit / }).getAttribute("aria-label"))).toEqual([
+        "Edit Task 2", "Edit Task 1", "Edit Task 3",
+      ])
     } finally {
+      rect.mockRestore()
+    }
+  })
+
+  it("ignores invalid saved order data", async () => {
+    tasks = [task(1), task(2)]
+    localStorage.setItem("taskflow.task-order.v1", '{"all:0":["invalid"]}')
+    render(<App />)
+    await screen.findByRole("button", { name: "Edit Task 1" })
+    const rows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
+    expect(within(rows[0]).getByRole("button", { name: "Edit Task 1" })).toBeInTheDocument()
+  })
+
+  it("restores independent orders for filters and pages", async () => {
+    tasks = Array.from({ length: 10 }, (_, index) => task(index + 1))
+    localStorage.setItem("taskflow.task-order.v1", JSON.stringify({ "all:0": [2, 1], "all:1": [10, 9], "todo:0": [3, 1, 2] }))
+    const user = userEvent.setup()
+    render(<App />)
+    await screen.findByRole("button", { name: "Edit Task 1" })
+    const firstRow = () => within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")[0]
+    expect(within(firstRow()).getByRole("button", { name: "Edit Task 2" })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Next" }))
+    await screen.findByRole("button", { name: "Edit Task 10" })
+    expect(within(firstRow()).getByRole("button", { name: "Edit Task 10" })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "To do" }))
+    await screen.findByRole("button", { name: "Edit Task 3" })
+    expect(within(firstRow()).getByRole("button", { name: "Edit Task 3" })).toBeInTheDocument()
+  })
+
+  it("warns when the browser cannot save the order", async () => {
+    tasks = [task(1), task(2)]
+    const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage blocked") })
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const row = this.closest("li")
+      const index = row ? Array.from(row.parentElement!.children).indexOf(row) : 0
+      return DOMRect.fromRect({ x: 0, y: index * 80, width: 400, height: 80 })
+    })
+    try {
+      const user = userEvent.setup()
+      render(<App />)
+      await user.click(await screen.findByRole("button", { name: "Reorder Task 1" }))
+      await user.keyboard(" {ArrowDown} ")
+      expect(await screen.findByRole("alert")).toHaveTextContent("Could not save the order")
+      const rows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
+      expect(within(rows[0]).getByRole("button", { name: "Edit Task 2" })).toBeInTheDocument()
+    } finally {
+      storage.mockRestore()
       rect.mockRestore()
     }
   })
