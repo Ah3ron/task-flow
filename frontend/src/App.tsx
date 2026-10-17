@@ -35,52 +35,35 @@ function Logo() {
   )
 }
 
-function TaskRow({ task, disabled, onEdit, onDelete, onUpdated }: { task: Task; disabled: boolean; onEdit: () => void; onDelete: () => void; onUpdated: (task: Task) => void }) {
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+function TaskRow({ task, disabled, onEdit, onDelete }: { task: Task; disabled: boolean; onEdit: () => void; onDelete: () => void }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, disabled })
   const Icon = statuses[task.status].icon
   const date = new Date(task.created_at)
   const dateLabel = Number.isNaN(date.getTime()) ? "Unknown date" : new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date)
 
-  async function changeStatus(status: TaskStatus) {
-    if (status === task.status || saving) return
-    setSaving(true)
-    setError(null)
-    try {
-      const updated = await tasksApi.update(task.id, { status })
-      onUpdated(updated)
-    } catch (cause) {
-      setError(errorMessage(cause))
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("card card-border relative rounded-xl shadow-sm shadow-base-content/5", statuses[task.status].rowClass, isDragging && "z-10 opacity-90 shadow-lg")}>
-      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-1 p-2 sm:gap-x-3 sm:p-3">
-        <button ref={setActivatorNodeRef} type="button" {...attributes} {...listeners} disabled={disabled} aria-label={`Reorder ${task.title}`} className="flex size-8 touch-none cursor-grab items-center justify-center rounded-lg text-base-content/40 hover:bg-base-content/5 hover:text-base-content focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing disabled:cursor-not-allowed"><GripVertical className="size-4" /></button>
-        <div className="min-w-0 pt-1">
-          <div className="flex items-start gap-2.5">
-            <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-lg", statuses[task.status].iconClass)}><Icon aria-hidden="true" className="size-4" /></span>
-            <div className="min-w-0 pt-0.5">
-              <p className={cn("break-words text-sm font-semibold leading-5", task.status === "done" && "text-base-content/60 line-through")}>{task.title}</p>
-              {task.description && <p className="mt-1 line-clamp-2 break-words text-sm leading-5 text-base-content/60">{task.description}</p>}
+      <div className="grid grid-cols-[2.75rem_minmax(0,1fr)]">
+        <button ref={setActivatorNodeRef} type="button" {...attributes} {...listeners} disabled={disabled} aria-label={`Reorder ${task.title}`} className="flex w-11 touch-none cursor-grab items-center justify-center self-stretch rounded-l-xl border-r border-base-content/5 text-base-content/40 hover:bg-base-content/5 hover:text-base-content focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary active:cursor-grabbing disabled:cursor-not-allowed"><GripVertical className="size-5" /></button>
+        <div className="min-w-0 p-2 sm:p-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2">
+            <div className="flex min-w-0 items-start gap-2.5 pt-1">
+              <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-lg", statuses[task.status].iconClass)}><Icon aria-hidden="true" className="size-4" /></span>
+              <div className="min-w-0 pt-0.5">
+                <p className={cn("break-words text-sm font-semibold leading-5", task.status === "done" && "text-base-content/60 line-through")}>{task.title}</p>
+                {task.description && <p className="mt-1 line-clamp-2 break-words text-sm leading-5 text-base-content/60">{task.description}</p>}
+              </div>
+            </div>
+            <div className="flex items-center text-base-content/50">
+              <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={disabled}><Pencil /></Button>
+              <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={disabled}><Trash2 /></Button>
             </div>
           </div>
+          <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1 sm:pl-8">
+            <span className="badge badge-ghost badge-sm">{statuses[task.status].label}</span>
+            <time dateTime={task.created_at} className="ml-auto text-right text-xs text-base-content/50">Created {dateLabel}</time>
+          </div>
         </div>
-        <div className="flex items-center text-base-content/50">
-          <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={saving || disabled}><Pencil /></Button>
-          <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={saving || disabled}><Trash2 /></Button>
-        </div>
-        <div className="col-span-2 col-start-2 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 sm:pl-8">
-          <select aria-label={`Status for ${task.title}`} className="select select-ghost select-sm w-32 rounded-lg bg-base-100/80 text-xs font-semibold" value={task.status} disabled={saving || disabled} onChange={(event) => void changeStatus(event.target.value as TaskStatus)}>
-            {(Object.keys(statuses) as TaskStatus[]).map((status) => <option key={status} value={status}>{statuses[status].label}</option>)}
-          </select>
-          <span className="text-xs text-base-content/50">Created {dateLabel}</span>
-        </div>
-        {error && <p role="alert" className="col-span-2 col-start-2 mt-2 break-words text-sm text-error sm:pl-8">Could not update status: {error}</p>}
       </div>
     </li>
   )
@@ -163,9 +146,10 @@ export default function App() {
     setPage(0)
   }
 
-  function saved(isNew: boolean) {
+  function saved(isNew: boolean, updated: Task) {
     setEditor(null)
     if (isNew) { setFilter("all"); setPage(0) }
+    else setTasks((current) => current.map((item) => item.id === updated.id ? updated : item))
     setRevision((value) => value + 1)
   }
 
@@ -225,7 +209,7 @@ export default function App() {
                 <p className="px-4 pt-4 text-xs text-base-content/55">Drag to reorder this page. Order resets when you reload.</p>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorder}>
                   <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-                    <ul aria-label="Tasks" aria-busy={loading} className="space-y-2 p-3 sm:p-4">{tasks.map((task) => <TaskRow key={task.id} task={task} disabled={showingPrevious} onEdit={() => setEditor(task)} onDelete={() => setDeleting(task)} onUpdated={(updated) => { setTasks((current) => current.map((item) => item.id === updated.id ? updated : item)); setRevision((value) => value + 1) }} />)}</ul>
+                    <ul aria-label="Tasks" aria-busy={loading} className="space-y-2 p-3 sm:p-4">{tasks.map((task) => <TaskRow key={task.id} task={task} disabled={showingPrevious} onEdit={() => setEditor(task)} onDelete={() => setDeleting(task)} />)}</ul>
                   </SortableContext>
                 </DndContext>
               </>

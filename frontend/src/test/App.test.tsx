@@ -66,7 +66,8 @@ describe("task workspace", () => {
     await user.click(within(dialog).getByRole("button", { name: "Save changes" }))
     await waitFor(() => expect(tasks[0].status).toBe("done"))
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Status for Write tests" })).toHaveValue("done"))
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit Write tests" }).closest("li")).toHaveClass("bg-success/10"))
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "Delete Write tests" }))
     dialog = screen.getByRole("dialog")
@@ -105,21 +106,25 @@ describe("task workspace", () => {
     expect(await screen.findByText("A fresh start")).toBeInTheDocument()
   })
 
-  it("changes status directly and refreshes the filtered list", async () => {
+  it("changes status in the form and refreshes the filtered list", async () => {
     tasks = [task(1), task(2, "done")]
     const fetchMock = mockApi()
     const user = userEvent.setup()
     render(<App />)
     await screen.findByText("Task 1")
     await user.click(screen.getByRole("button", { name: "To do" }))
-    const status = await screen.findByRole("combobox", { name: "Status for Task 1" })
-    await waitFor(() => expect(status).toBeEnabled())
-    await user.selectOptions(status, "done")
+    const edit = await screen.findByRole("button", { name: "Edit Task 1" })
+    await waitFor(() => expect(edit).toBeEnabled())
+    await user.click(edit)
+    const dialog = screen.getByRole("dialog")
+    await user.selectOptions(within(dialog).getByLabelText("Status"), "done")
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }))
     await waitFor(() => expect(tasks[0].status).toBe("done"))
     expect(await screen.findByText("Nothing here yet")).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledWith("/api/tasks/1", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ status: "done" }) }))
+    expect(fetchMock).toHaveBeenCalledWith("/api/tasks/1", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ title: "Task 1", description: null, status: "done" }) }))
     await user.click(screen.getByRole("button", { name: "Done" }))
-    expect(await screen.findByRole("combobox", { name: "Status for Task 1" })).toHaveValue("done")
+    const doneEdit = await screen.findByRole("button", { name: "Edit Task 1" })
+    expect(doneEdit.closest("li")).toHaveClass("bg-success/10")
   })
 
   it("keeps the previous status and reports a failed update", async () => {
@@ -127,12 +132,17 @@ describe("task workspace", () => {
     const fetchMock = mockApi()
     const user = userEvent.setup()
     render(<App />)
-    const status = await screen.findByRole("combobox", { name: "Status for Task 1" })
+    const edit = await screen.findByRole("button", { name: "Edit Task 1" })
+    await user.click(edit)
+    const dialog = screen.getByRole("dialog")
+    const status = within(dialog).getByLabelText("Status")
     fetchMock.mockRejectedValueOnce(new Error("Network unavailable"))
     await user.selectOptions(status, "in_progress")
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not update status: Network unavailable")
-    expect(status).toHaveValue("todo")
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }))
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Network unavailable")
+    expect(status).toHaveValue("in_progress")
     expect(status).toBeEnabled()
+    expect(tasks[0].status).toBe("todo")
   })
 
   it("keeps the same rows visible through a refresh and a failed refresh", async () => {
@@ -140,26 +150,29 @@ describe("task workspace", () => {
     const fetchMock = mockApi()
     const user = userEvent.setup()
     render(<App />)
-    const status = await screen.findByRole("combobox", { name: "Status for Task 1" })
-    const row = status.closest("li")
+    const edit = await screen.findByRole("button", { name: "Edit Task 1" })
+    const row = edit.closest("li")!
     let finishRefresh!: (response: Response) => void
     fetchMock.mockImplementationOnce(async () => {
       tasks[0] = { ...tasks[0], status: "done" }
       return Response.json(tasks[0])
     }).mockImplementationOnce(() => new Promise<Response>((resolve) => { finishRefresh = resolve }))
 
-    await user.selectOptions(status, "done")
+    await user.click(edit)
+    const dialog = screen.getByRole("dialog")
+    await user.selectOptions(within(dialog).getByLabelText("Status"), "done")
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }))
     await screen.findByText("Updating tasks...")
-    expect(status.closest("li")).toBe(row)
-    expect(status).toHaveValue("done")
-    expect(status).toBeEnabled()
+    expect(edit.closest("li")).toBe(row)
+    expect(row).toHaveClass("bg-success/10")
+    expect(edit).toBeEnabled()
     expect(screen.getByRole("list", { name: "Tasks" })).toHaveAttribute("aria-busy", "true")
     await act(async () => { finishRefresh(new Response(null, { status: 500 })) })
     expect(await screen.findByRole("alert")).toHaveTextContent("Showing previous results")
-    expect(status.closest("li")).toBe(row)
+    expect(edit.closest("li")).toBe(row)
     await user.click(screen.getByRole("button", { name: "Try again" }))
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument())
-    expect(screen.getByRole("combobox", { name: "Status for Task 1" }).closest("li")).toBe(row)
+    expect(screen.getByRole("button", { name: "Edit Task 1" }).closest("li")).toBe(row)
   })
 
   it("marks previous results and disables their actions while changing filters", async () => {
@@ -167,19 +180,19 @@ describe("task workspace", () => {
     const fetchMock = mockApi()
     const user = userEvent.setup()
     render(<App />)
-    const status = await screen.findByRole("combobox", { name: "Status for Task 1" })
+    const edit = await screen.findByRole("button", { name: "Edit Task 1" })
     let finishFilter!: (response: Response) => void
     fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => { finishFilter = resolve }))
     await user.click(screen.getByRole("button", { name: "Done" }))
-    expect(status).toBeInTheDocument()
-    expect(status).toBeDisabled()
+    expect(edit).toBeInTheDocument()
+    expect(edit).toBeDisabled()
     expect(screen.getByText("Updating tasks... Showing previous results.")).toBeInTheDocument()
     await act(async () => { finishFilter(new Response(null, { status: 500 })) })
     expect(await screen.findByRole("alert")).toHaveTextContent("Showing previous results")
-    expect(status).toBeDisabled()
+    expect(edit).toBeDisabled()
     await user.click(screen.getByRole("button", { name: "Try again" }))
     await waitFor(() => expect(screen.queryByText("Task 1")).not.toBeInTheDocument())
-    expect(screen.getByRole("combobox", { name: "Status for Task 2" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Edit Task 2" })).toBeEnabled()
   })
 
   it("reorders tasks with the keyboard", async () => {
@@ -197,21 +210,24 @@ describe("task workspace", () => {
       await user.keyboard(" {ArrowDown} ")
       await waitFor(() => {
         const rows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
-        expect(rows.map((row) => within(row).getByRole("combobox").getAttribute("aria-label"))).toEqual([
-          "Status for Task 2", "Status for Task 1", "Status for Task 3",
+        expect(rows.map((row) => within(row).getByRole("button", { name: /^Edit / }).getAttribute("aria-label"))).toEqual([
+          "Edit Task 2", "Edit Task 1", "Edit Task 3",
         ])
       })
-      await user.selectOptions(screen.getByRole("combobox", { name: "Status for Task 1" }), "done")
+      await user.click(screen.getByRole("button", { name: "Edit Task 1" }))
+      const dialog = screen.getByRole("dialog")
+      await user.selectOptions(within(dialog).getByLabelText("Status"), "done")
+      await user.click(within(dialog).getByRole("button", { name: "Save changes" }))
       await waitFor(() => expect(tasks[0].status).toBe("done"))
-      await waitFor(() => expect(screen.getByRole("combobox", { name: "Status for Task 1" })).toHaveValue("done"))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
       const rows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
-      expect(within(rows[0]).getByRole("combobox")).toHaveAccessibleName("Status for Task 2")
+      expect(within(rows[0]).getByRole("button", { name: "Edit Task 2" })).toBeInTheDocument()
       expect(rows[1]).toHaveClass("bg-success/10")
       view.unmount()
       render(<App />)
-      await screen.findByRole("combobox", { name: "Status for Task 1" })
+      await screen.findByRole("button", { name: "Edit Task 1" })
       const resetRows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
-      expect(within(resetRows[0]).getByRole("combobox")).toHaveAccessibleName("Status for Task 1")
+      expect(within(resetRows[0]).getByRole("button", { name: "Edit Task 1" })).toBeInTheDocument()
     } finally {
       rect.mockRestore()
     }

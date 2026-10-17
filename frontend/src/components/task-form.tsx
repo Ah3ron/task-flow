@@ -9,7 +9,7 @@ import { errorMessage, tasksApi, type Task, type TaskStatus } from "@/lib/api"
 interface TaskFormProps {
   task: Task | null
   onClose: () => void
-  onSaved: (isNew: boolean) => void
+  onSaved: (isNew: boolean, saved: Task) => void
 }
 
 export function TaskForm({ task, onClose, onSaved }: TaskFormProps) {
@@ -29,9 +29,8 @@ export function TaskForm({ task, onClose, onSaved }: TaskFormProps) {
     setSaving(true)
     const input = { title: title.trim(), description: description.trim() || null, status }
     try {
-      if (task) await tasksApi.update(task.id, input)
-      else await tasksApi.create(input)
-      onSaved(!task)
+      const saved = task ? await tasksApi.update(task.id, input) : await tasksApi.create(input)
+      onSaved(!task, saved)
     } catch (cause) {
       setError(errorMessage(cause))
       setSaving(false)
