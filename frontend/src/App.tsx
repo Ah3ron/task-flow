@@ -223,7 +223,6 @@ export default function App() {
               </div>
             ) : tasks.length > 0 ? (
               <>
-                <p className="px-4 pt-4 text-xs text-base-content/55">Drag to reorder this page. Order is saved in this browser for each filter and page.</p>
                 {orderSaveError && <div role="alert" className="alert alert-warning alert-soft mx-4 mt-3 w-auto text-sm">Could not save the order in this browser. The latest order will not persist after reload.</div>}
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorder}>
                   <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
