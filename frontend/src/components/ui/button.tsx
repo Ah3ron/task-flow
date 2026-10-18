@@ -15,9 +15,9 @@ const buttonVariants = cva(
         destructive: "bg-error text-error-content hover:bg-error/90",
       },
       size: {
-        default: "h-10 px-4",
-        sm: "h-9 px-3",
-        icon: "size-9",
+        default: "h-11 px-4 sm:h-10",
+        sm: "h-11 px-3 sm:h-9",
+        icon: "size-11 sm:size-9",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

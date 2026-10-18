@@ -66,7 +66,10 @@ describe("task workspace", () => {
     await user.click(within(dialog).getByRole("button", { name: "Save changes" }))
     await waitFor(() => expect(tasks[0].status).toBe("done"))
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
-    await waitFor(() => expect(screen.getByRole("button", { name: "Edit Write tests" }).closest("li")).toHaveClass("bg-success/10"))
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit Write tests" }).closest("li")).toHaveClass("bg-base-200"))
+    expect(screen.getByText("Write tests")).toHaveClass("line-through")
+    expect(screen.getByRole("button", { name: "Edit Write tests" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Reorder Write tests" })).toBeEnabled()
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "Delete Write tests" }))
@@ -124,7 +127,7 @@ describe("task workspace", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/tasks/1", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ title: "Task 1", description: null, status: "done" }) }))
     await user.click(screen.getByRole("button", { name: "Done" }))
     const doneEdit = await screen.findByRole("button", { name: "Edit Task 1" })
-    expect(doneEdit.closest("li")).toHaveClass("bg-success/10")
+    expect(doneEdit.closest("li")).toHaveClass("bg-base-200")
   })
 
   it("keeps the previous status and reports a failed update", async () => {
@@ -164,7 +167,7 @@ describe("task workspace", () => {
     await user.click(within(dialog).getByRole("button", { name: "Save changes" }))
     await screen.findByText("Updating tasks...")
     expect(edit.closest("li")).toBe(row)
-    expect(row).toHaveClass("bg-success/10")
+    expect(row).toHaveClass("bg-base-200")
     expect(edit).toBeEnabled()
     expect(screen.getByRole("list", { name: "Tasks" })).toHaveAttribute("aria-busy", "true")
     await act(async () => { finishRefresh(new Response(null, { status: 500 })) })
@@ -222,7 +225,7 @@ describe("task workspace", () => {
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
       const rows = within(screen.getByRole("list", { name: "Tasks" })).getAllByRole("listitem")
       expect(within(rows[0]).getByRole("button", { name: "Edit Task 2" })).toBeInTheDocument()
-      expect(rows[1]).toHaveClass("bg-success/10")
+      expect(rows[1]).toHaveClass("bg-base-200")
       view.unmount()
       render(<App />)
       await screen.findByRole("button", { name: "Edit Task 1" })

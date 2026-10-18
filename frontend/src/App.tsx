@@ -37,7 +37,7 @@ const filters: { value: TaskFilter; label: string }[] = [
 const statuses: Record<TaskStatus, { label: string; rowClass: string; iconClass: string; icon: typeof Circle }> = {
   todo: { label: "To do", rowClass: "border-base-300 bg-base-100", iconClass: "bg-base-200 text-base-content/55", icon: Circle },
   in_progress: { label: "In progress", rowClass: "border-info/30 bg-info/10", iconClass: "bg-info/15 text-info", icon: CircleDot },
-  done: { label: "Done", rowClass: "border-success/30 bg-success/10", iconClass: "bg-success/15 text-success", icon: CheckCircle2 },
+  done: { label: "Done", rowClass: "border-base-300 bg-base-200", iconClass: "bg-base-300 text-base-content/60", icon: CheckCircle2 },
 }
 
 function Logo() {
@@ -59,24 +59,20 @@ function TaskRow({ task, disabled, onEdit, onDelete }: { task: Task; disabled: b
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("card card-border relative rounded-xl shadow-sm shadow-base-content/5", statuses[task.status].rowClass, isDragging && "z-10 opacity-90 shadow-lg")}>
       <div className="grid grid-cols-[2.75rem_minmax(0,1fr)]">
         <button ref={setActivatorNodeRef} type="button" {...attributes} {...listeners} disabled={disabled} aria-label={`Reorder ${task.title}`} className="flex w-11 touch-none cursor-grab items-center justify-center self-stretch rounded-l-xl border-r border-base-content/5 text-base-content/40 hover:bg-base-content/5 hover:text-base-content focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary active:cursor-grabbing disabled:cursor-not-allowed"><GripVertical className="size-5" /></button>
-        <div className="min-w-0 p-2 sm:p-3">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2">
-            <div className="flex min-w-0 items-start gap-2.5 pt-1">
-              <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-lg", statuses[task.status].iconClass)}><Icon aria-hidden="true" className="size-4" /></span>
-              <div className="min-w-0 pt-0.5">
-                <p className={cn("break-words text-sm font-semibold leading-5", task.status === "done" && "text-base-content/60 line-through")}>{task.title}</p>
-                {task.description && <p className="mt-1 line-clamp-2 break-words text-sm leading-5 text-base-content/60">{task.description}</p>}
-              </div>
-            </div>
-            <div className="flex items-center text-base-content/50">
-              <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={disabled}><Pencil /></Button>
-              <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={disabled}><Trash2 /></Button>
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 p-2 sm:p-3">
+          <div className="col-span-2 flex min-w-0 items-start gap-2.5 pt-1 sm:col-span-1">
+            <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-lg", statuses[task.status].iconClass)}><Icon aria-hidden="true" className="size-4" /></span>
+            <div className="min-w-0 pt-0.5">
+              <p className={cn("break-words text-sm font-semibold leading-5", task.status === "done" && "text-base-content/70 line-through")}>{task.title}</p>
+              {task.description && <p className={cn("mt-1 line-clamp-2 break-words text-sm leading-5 text-base-content/60", task.status === "done" && "text-base-content/65")}>{task.description}</p>}
             </div>
           </div>
-          <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1 sm:pl-8">
-            <span className="badge badge-ghost badge-sm">{statuses[task.status].label}</span>
-            <time dateTime={task.created_at} className="ml-auto text-right text-xs text-base-content/50">Created {dateLabel}</time>
+          <div className="col-start-2 row-start-2 flex items-center text-base-content/50 sm:row-start-1">
+            <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={disabled}><Pencil /></Button>
+            <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={disabled}><Trash2 /></Button>
           </div>
+          <span className="badge badge-ghost badge-sm col-start-1 row-start-2 self-center sm:ml-8">{statuses[task.status].label}</span>
+          <time dateTime={task.created_at} className="col-span-2 row-start-3 justify-self-end text-right text-xs text-base-content/50 sm:col-span-1 sm:col-start-2 sm:row-start-2 sm:self-end">Created {dateLabel}</time>
         </div>
       </div>
     </li>
@@ -195,12 +191,12 @@ export default function App() {
       <header className="border-b border-base-300 bg-base-100">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
           <Logo />
-          <a href="/docs" target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs font-medium text-base-content/55 hover:text-primary">API docs <ExternalLink className="size-3" /></a>
+          <a href="/docs" target="_blank" rel="noreferrer" className="flex min-h-11 items-center gap-1.5 text-xs font-medium text-base-content/55 hover:text-primary">API docs <ExternalLink className="size-3" /></a>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 pt-8 pb-16 sm:px-6 sm:pt-12">
-        <div className="flex items-start justify-between gap-4">
+      <main className="mx-auto max-w-5xl px-4 pt-6 pb-16 sm:px-6 sm:pt-12">
+        <div className="flex flex-col items-stretch gap-4 min-[400px]:flex-row min-[400px]:items-start min-[400px]:justify-between">
           <div><h1 id="tasks-heading" className="text-2xl font-bold tracking-tight sm:text-3xl">My tasks</h1><p className="mt-1.5 text-sm text-base-content/55">Keep track of what needs doing.</p></div>
           <Button type="button" onClick={() => setEditor("new")}><Plus /> New task</Button>
         </div>
@@ -208,8 +204,8 @@ export default function App() {
         <section aria-labelledby="tasks-heading" className="mt-8">
           <div className="overflow-hidden rounded-xl border border-base-300 bg-base-100">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-base-300 px-2 py-2 sm:px-3">
-              <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filter tasks">
-                {filters.map((item) => <button key={item.value} type="button" aria-pressed={filter === item.value} onClick={() => selectFilter(item.value)} className={cn("rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-primary", filter === item.value ? "bg-base-200 text-base-content" : "text-base-content/55 hover:text-base-content")}>{item.label}</button>)}
+              <div className="grid w-full grid-cols-2 gap-1 min-[480px]:flex min-[480px]:w-auto min-[480px]:flex-wrap min-[480px]:items-center" role="group" aria-label="Filter tasks">
+                {filters.map((item) => <button key={item.value} type="button" aria-pressed={filter === item.value} onClick={() => selectFilter(item.value)} className={cn("min-h-11 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-primary", filter === item.value ? "bg-base-200 text-base-content" : "text-base-content/55 hover:text-base-content")}>{item.label}</button>)}
               </div>
               <span className="px-3 text-xs text-base-content/45" role="status">{loading && loadedQuery !== null ? `Updating tasks...${showingPrevious ? " Showing previous results." : ""}` : showingPrevious ? "Showing previous results" : loadedQuery !== null ? `${tasks.length} shown` : ""}</span>
             </div>
@@ -227,8 +223,8 @@ export default function App() {
               </div>
             ) : tasks.length > 0 ? (
               <>
-                <p className="px-4 pt-4 text-xs text-base-content/55">Drag to reorder this page. Order is saved in this browser.</p>
-                {orderSaveError && <div role="alert" className="alert alert-warning alert-soft mx-4 mt-3 w-auto text-sm">Could not save the order in this browser. It will reset on reload.</div>}
+                <p className="px-4 pt-4 text-xs text-base-content/55">Drag to reorder this page. Order is saved in this browser for each filter and page.</p>
+                {orderSaveError && <div role="alert" className="alert alert-warning alert-soft mx-4 mt-3 w-auto text-sm">Could not save the order in this browser. The latest order will not persist after reload.</div>}
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorder}>
                   <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
                     <ul aria-label="Tasks" aria-busy={loading} className="space-y-2 p-3 sm:p-4">{tasks.map((task) => <TaskRow key={task.id} task={task} disabled={showingPrevious} onEdit={() => setEditor(task)} onDelete={() => setDeleting(task)} />)}</ul>
