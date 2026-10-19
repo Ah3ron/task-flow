@@ -67,9 +67,9 @@ function TaskRow({ task, disabled, onEdit, onDelete }: { task: Task; disabled: b
               {task.description && <p className={cn("mt-1 line-clamp-2 break-words text-sm leading-5 text-base-content/60", task.status === "done" && "text-base-content/65")}>{task.description}</p>}
             </div>
           </div>
-          <div className="col-start-2 row-start-2 flex items-center text-base-content/50 sm:row-start-1">
-            <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={disabled}><Pencil /></Button>
-            <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={disabled}><Trash2 /></Button>
+          <div className="col-start-2 row-start-2 flex items-center pr-2 text-base-content/50 sm:row-start-1 sm:pr-3">
+            <Button type="button" variant="ghost" size="icon" className="transition-[background-color,color,scale] duration-200 hover:scale-105 hover:text-base-content motion-reduce:transition-none motion-reduce:hover:scale-100" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={disabled}><Pencil /></Button>
+            <Button type="button" variant="ghost" size="icon" className="transition-[background-color,color,scale] duration-200 hover:scale-105 hover:bg-red-600 hover:text-white focus-visible:bg-red-600 focus-visible:text-white motion-reduce:transition-none motion-reduce:hover:scale-100" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={disabled}><Trash2 /></Button>
           </div>
           <span className="badge badge-ghost badge-sm col-start-1 row-start-2 self-center sm:ml-8">{statuses[task.status].label}</span>
           <time dateTime={task.created_at} className="col-span-2 row-start-3 justify-self-end text-right text-xs text-base-content/50 sm:col-span-1 sm:col-start-2 sm:row-start-2 sm:self-end">Created {dateLabel}</time>
