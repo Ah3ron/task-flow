@@ -67,7 +67,7 @@ function TaskRow({ task, disabled, onEdit, onDelete }: { task: Task; disabled: b
               {task.description && <p className={cn("mt-1 line-clamp-2 break-words text-sm leading-5 text-base-content/60", task.status === "done" && "text-base-content/65")}>{task.description}</p>}
             </div>
           </div>
-          <div className="col-start-2 row-start-2 flex items-center pr-2 text-base-content/50 sm:row-start-1 sm:pr-3">
+          <div className="col-start-2 row-start-2 flex items-center justify-end text-base-content/50 sm:row-start-1">
             <Button type="button" variant="ghost" size="icon" className="transition-[background-color,color,scale] duration-200 hover:scale-105 hover:text-base-content motion-reduce:transition-none motion-reduce:hover:scale-100" aria-label={`Edit ${task.title}`} onClick={onEdit} disabled={disabled}><Pencil /></Button>
             <Button type="button" variant="ghost" size="icon" className="transition-[background-color,color,scale] duration-200 hover:scale-105 hover:bg-error hover:text-white focus-visible:bg-error focus-visible:text-white motion-reduce:transition-none motion-reduce:hover:scale-100" aria-label={`Delete ${task.title}`} onClick={onDelete} disabled={disabled}><Trash2 /></Button>
           </div>
